@@ -177,11 +177,8 @@ public class GraphPathFinder {
             // Find all trips used in this path and ban them for the remaining searches
             for (GraphPath path : newPaths) {
                 // path.dump();
-                List<AgencyAndId> tripIds = path.getTrips();
-                for (AgencyAndId tripId : tripIds) {
-                    options.banTrip(tripId);
-                }
-                if (tripIds.isEmpty()) {
+                banTrips(options, path.getTrips());
+                if (path.getTrips().isEmpty()) {
                     // This path does not use transit (is entirely on-street). Do not repeatedly find the same one.
                     options.onlyTransitTrips = true;
                 }
@@ -196,6 +193,12 @@ public class GraphPathFinder {
         LOG.debug("END SEARCH ({} msec)", System.currentTimeMillis() - searchBeginTime);
         Collections.sort(paths, new PathComparator(options.arriveBy));
         return paths;
+    }
+
+    private void banTrips(RoutingRequest options, List<AgencyAndId> tripIds) {
+        for (AgencyAndId tripId : tripIds) {
+            options.banTrip(tripId);
+        }
     }
 
     /**
@@ -274,14 +277,15 @@ public class GraphPathFinder {
                             (options.arriveBy && joinedPath.states.getLast().getTimeInMillis() < options.dateTime * 1000)){
                         joinedPaths.add(joinedPath);
                         if(newPaths.size() > 1){
-                            for (AgencyAndId tripId : joinedPath.getTrips()) {
-                                options.banTrip(tripId);
-                            }
+                            banTrips(options, joinedPath.getTrips());
                         }
                     }
                 }
                 reversedPaths.addAll(joinedPaths);
             }
+
+            // ban the trips of the original path regardless of optimisation
+            banTrips(options,newPath.getTrips());
         }
         return reversedPaths.isEmpty() ? newPaths : reversedPaths;
     }
