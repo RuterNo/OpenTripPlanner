@@ -81,6 +81,7 @@ public class GraphPathFinder {
     public List<GraphPath> getPaths(RoutingRequest options) {
 
         RoutingRequest originalReq = options.clone();
+        Date startTime = options.getDateTime();
 
         if (options == null) {
             LOG.error("PathService was passed a null routing request.");
@@ -192,6 +193,7 @@ public class GraphPathFinder {
         }
         LOG.debug("END SEARCH ({} msec)", System.currentTimeMillis() - searchBeginTime);
         Collections.sort(paths, new PathComparator(options.arriveBy));
+        options.setDateTime(startTime);
         return paths;
     }
 
@@ -273,19 +275,26 @@ public class GraphPathFinder {
                     }
                     GraphPath joinedPath = joinPaths(concatenatedPaths);
 
-                    if((!options.arriveBy && joinedPath.states.getFirst().getTimeInMillis() > options.dateTime * 1000) ||
-                            (options.arriveBy && joinedPath.states.getLast().getTimeInMillis() < options.dateTime * 1000)){
+                    if((!originalReq.arriveBy && joinedPath.states.getFirst().getTimeInMillis() > originalReq.dateTime * 1000) ||
+                            (originalReq.arriveBy && joinedPath.states.getLast().getTimeInMillis() < originalReq.dateTime * 1000)){
                         joinedPaths.add(joinedPath);
                         if(newPaths.size() > 1){
                             banTrips(options, joinedPath.getTrips());
                         }
+
+                        Date dateTime;
+                        if(options.arriveBy){
+                            dateTime = new Date(joinedPath.getEndTime() * 1000);
+                        }else{
+                            dateTime = new Date(joinedPath.getStartTime() * 1000);
+                        }
+
+                        options.setDateTime(dateTime);
+                        originalReq.setDateTime(dateTime);
                     }
                 }
                 reversedPaths.addAll(joinedPaths);
             }
-
-            // ban the trips of the original path regardless of optimisation
-            banTrips(options,newPath.getTrips());
         }
         return reversedPaths.isEmpty() ? newPaths : reversedPaths;
     }
