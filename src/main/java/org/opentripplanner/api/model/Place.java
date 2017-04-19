@@ -71,6 +71,14 @@ public class Place {
 
     @XmlAttribute
     @JsonSerialize
+    public Integer pickupType;
+
+    @XmlAttribute
+    @JsonSerialize
+    public Integer dropOffType;
+
+    @XmlAttribute
+    @JsonSerialize
     public String orig;
 
     @XmlAttribute

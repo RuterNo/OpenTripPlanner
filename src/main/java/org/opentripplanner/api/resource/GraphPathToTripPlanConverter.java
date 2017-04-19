@@ -16,16 +16,19 @@ package org.opentripplanner.api.resource;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.LineString;
-import org.onebusaway.gtfs.model.*;
+import org.onebusaway.gtfs.model.Agency;
+import org.onebusaway.gtfs.model.Route;
+import org.onebusaway.gtfs.model.Stop;
+import org.onebusaway.gtfs.model.Trip;
 import org.opentripplanner.api.model.*;
 import org.opentripplanner.common.geometry.DirectionUtils;
 import org.opentripplanner.common.geometry.GeometryUtils;
 import org.opentripplanner.common.geometry.PackedCoordinateSequence;
 import org.opentripplanner.common.model.P2;
+import org.opentripplanner.model.StopPattern;
 import org.opentripplanner.profile.BikeRentalStationInfo;
 import org.opentripplanner.routing.alertpatch.Alert;
 import org.opentripplanner.routing.alertpatch.AlertPatch;
-import org.opentripplanner.routing.bike_rental.BikeRentalStation;
 import org.opentripplanner.routing.core.*;
 import org.opentripplanner.routing.edgetype.*;
 import org.opentripplanner.routing.error.TrivialPathException;
@@ -697,6 +700,25 @@ public abstract class GraphPathToTripPlanConverter {
                 place.stopSequence = tripTimes.getStopSequence(place.stopIndex);
             }
             place.vertexType = VertexType.TRANSIT;
+
+            int pickup = StopPattern.PICKDROP_SCHEDULED;
+            int dropOff = StopPattern.PICKDROP_SCHEDULED;
+
+            if(vertex instanceof OnboardVertex){
+                StopPattern stopPattern = ((OnboardVertex)vertex).getTripPattern().stopPattern;
+                int idx = 0;
+
+                for (Stop currentStop : stopPattern.stops) {
+                    if (currentStop == stop) {
+                        pickup = stopPattern.pickups[idx];
+                        dropOff = stopPattern.dropoffs[idx];
+                    }
+                    idx++;
+                }
+            }
+            place.pickupType = pickup;
+            place.dropOffType = dropOff;
+
         } else if(vertex instanceof BikeRentalStationVertex) {
             place.bikeShareId = ((BikeRentalStationVertex) vertex).getId();
             LOG.trace("Added bike share Id {} to place", place.bikeShareId);
