@@ -346,6 +346,11 @@ public class EncodedPolylineJSONSerializerTest extends TestCase {
         }
 
         @Override
+        public boolean hasToken(JsonToken t) {
+            return false;
+        }
+
+        @Override
         public String getCurrentName() throws IOException {
             return null;
         }

@@ -21,9 +21,8 @@ import org.opentripplanner.updater.bike_park.BikeParkUpdater;
 import org.opentripplanner.updater.bike_rental.BikeRentalUpdater;
 import org.opentripplanner.updater.example.ExampleGraphUpdater;
 import org.opentripplanner.updater.example.ExamplePollingGraphUpdater;
-import org.opentripplanner.updater.siri.SiriETUpdater;
+import org.opentripplanner.updater.siri.*;
 import org.opentripplanner.updater.stoptime.PollingStoptimeUpdater;
-import org.opentripplanner.updater.siri.SiriVMUpdater;
 import org.opentripplanner.updater.stoptime.WebsocketGtfsRealtimeUpdater;
 import org.opentripplanner.updater.street_notes.WinkkiPollingGraphUpdater;
 import org.opentripplanner.updater.traffic.OpenTrafficUpdater;
@@ -122,6 +121,18 @@ public abstract class GraphUpdaterConfigurator {
                 }
                 else if (type.equals("siri-et-updater")) {
                     updater = new SiriETUpdater();
+                }
+                else if (type.equals("siri-activemq-updater-et")) {
+                    updater = new SiriActiveMQUpdater();
+                }
+                else if (type.equals("siri-activemq-updater-vm")) {
+                    updater = new SiriActiveMQUpdater();
+                }
+                else if (type.equals("siri-lite-et-updater")) {
+                    updater = new SiriLiteETUpdater();
+                }
+                else if (type.equals("siri-lite-vm-updater")) {
+                    updater = new SiriLiteVMUpdater();
                 }
             }
 

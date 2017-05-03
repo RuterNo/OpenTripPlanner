@@ -13,29 +13,24 @@
 
 package org.opentripplanner.updater.alerts;
 
-import java.util.*;
-
+import com.google.transit.realtime.GtfsRealtime;
+import com.google.transit.realtime.GtfsRealtime.*;
 import org.onebusaway.gtfs.model.AgencyAndId;
 import org.onebusaway.gtfs.model.Route;
 import org.opentripplanner.routing.alertpatch.Alert;
 import org.opentripplanner.routing.alertpatch.AlertPatch;
 import org.opentripplanner.routing.alertpatch.TimePeriod;
 import org.opentripplanner.routing.services.AlertPatchService;
+import org.opentripplanner.updater.GtfsRealtimeFuzzyTripMatcher;
 import org.opentripplanner.updater.SiriFuzzyTripMatcher;
 import org.opentripplanner.util.I18NString;
 import org.opentripplanner.util.TranslatedString;
-import org.opentripplanner.updater.GtfsRealtimeFuzzyTripMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.transit.realtime.GtfsRealtime;
-import com.google.transit.realtime.GtfsRealtime.EntitySelector;
-import com.google.transit.realtime.GtfsRealtime.FeedEntity;
-import com.google.transit.realtime.GtfsRealtime.FeedMessage;
-import com.google.transit.realtime.GtfsRealtime.TimeRange;
-import com.google.transit.realtime.GtfsRealtime.TripDescriptor;
 import uk.org.ifopt.siri20.StopPlaceRef;
 import uk.org.siri.siri20.*;
+
+import java.util.*;
 
 /**
  * This updater only includes GTFS-Realtime Service Alert feeds.
@@ -79,14 +74,13 @@ public class AlertsUpdateHandler {
             SituationExchangeDeliveryStructure.Situations situations = sxDelivery.getSituations();
             if (situations != null) {
                 for (PtSituationElement sxElement : situations.getPtSituationElements()) {
-                    String id = sxElement.getSituationNumber().getValue();
-                    handleAlert(id, sxElement);
+                    handleAlert(sxElement);
                 }
             }
         }
     }
 
-    private void handleAlert(String id, PtSituationElement situation) {
+    private void handleAlert(PtSituationElement situation) {
         Alert alert = new Alert();
 
         if (situation.getDescriptions() != null && !situation.getDescriptions().isEmpty()) {
@@ -96,9 +90,10 @@ public class AlertsUpdateHandler {
         }
         alert.alertHeaderText = getTranslatedString(situation.getSummaries());
 
-        ArrayList<TimePeriod> periods = new ArrayList<TimePeriod>();
+        ArrayList<TimePeriod> periods = new ArrayList<>();
         if(situation.getValidityPeriods().size() > 0) {
             long bestStartTime = Long.MAX_VALUE;
+            long bestEndTime = 0;
             for (HalfOpenTimestampOutputRangeStructure activePeriod : situation.getValidityPeriods()) {
 
                 final long realStart = activePeriod.getStartTime() != null ? activePeriod.getStartTime().toInstant().toEpochMilli() : 0;
@@ -106,22 +101,29 @@ public class AlertsUpdateHandler {
                 if (realStart > 0 && realStart < bestStartTime) {
                     bestStartTime = realStart;
                 }
-                final long end = activePeriod.getEndTime() != null ? activePeriod.getEndTime().toInstant().toEpochMilli() : Long.MAX_VALUE;
+
+                final long realEnd = activePeriod.getEndTime() != null ? activePeriod.getEndTime().toInstant().toEpochMilli() : 0;
+                final long end = activePeriod.getEndTime() != null? realEnd  : 0;
+                if (realEnd > 0 && realEnd > bestEndTime) {
+                    bestEndTime = realEnd;
+                }
+
                 periods.add(new TimePeriod(start, end));
             }
             if (bestStartTime != Long.MAX_VALUE) {
                 alert.effectiveStartDate = new Date(bestStartTime);
+            }
+            if (bestEndTime != 0) {
+                alert.effectiveEndDate = new Date(bestEndTime);
             }
         } else {
             // Per the GTFS-rt spec, if an alert has no TimeRanges, than it should always be shown.
             periods.add(new TimePeriod(0, Long.MAX_VALUE));
         }
 
-        //String patchId = id + "_" + situation.getSituationNumber().getValue();
-
         String situationNumber = null;
         if (situation.getSituationNumber() != null) {
-            situationNumber = situation.getSituationNumber().getValue();
+            situationNumber = situation.getSituationNumber().getValue() + ":";
         }
 
         List<AlertPatch> patches = new ArrayList<>();
@@ -143,7 +145,7 @@ public class AlertsUpdateHandler {
                 alertPatch.setAgencyId(operator);
                 alertPatch.setTimePeriods(periods);
                 alertPatch.setAlert(alert);
-                alertPatch.setId(situationNumber);
+                alertPatch.setId(situationNumber + operator);
                 patches.add(alertPatch);
             }
         }
@@ -165,7 +167,8 @@ public class AlertsUpdateHandler {
                     AlertPatch alertPatch = new AlertPatch();
                     alertPatch.setRoute(route.getId());
                     alertPatch.setStop(stopId);
-                    alertPatch.setId(situationNumber);
+                    alertPatch.setTimePeriods(periods);
+                    alertPatch.setId(situationNumber + route.getId());
                     patches.add(alertPatch);
                 }
             }
@@ -186,12 +189,15 @@ public class AlertsUpdateHandler {
                             continue;
                         }
 
-                        AgencyAndId lineId = siriFuzzyTripMatcher.getRoute(lineRef.getValue());
+                        Set<Route> affectedRoutes = siriFuzzyTripMatcher.getRoutes(lineRef.getValue());
+                        for (Route route : affectedRoutes) {
 
-                        AlertPatch alertPatch = new AlertPatch();
-                        alertPatch.setRoute(lineId);
-                        alertPatch.setId(situationNumber);
-                        patches.add(alertPatch);
+                            AlertPatch alertPatch = new AlertPatch();
+                            alertPatch.setRoute(route.getId());
+                            alertPatch.setTimePeriods(periods);
+                            alertPatch.setId(situationNumber + route.getId());
+                            patches.add(alertPatch);
+                        }
                     }
                 }
                 NetworkRefStructure networkRef = affectedNetwork.getNetworkRef();
@@ -224,6 +230,7 @@ public class AlertsUpdateHandler {
                     AlertPatch alertPatch = new AlertPatch();
                     alertPatch.setRoute(route.getId());
                     alertPatch.setStop(stopId);
+                    alertPatch.setId(situationNumber + route.getId());
                     patches.add(alertPatch);
                 }
             }
@@ -247,10 +254,14 @@ public class AlertsUpdateHandler {
 
                 if (!(hasTripRefs || hasStopRefs)) {
                     if (lineRef != null) {
-                        AgencyAndId routeId = siriFuzzyTripMatcher.getRoute(lineRef);
-                        AlertPatch alertPatch = new AlertPatch();
-                        alertPatch.setRoute(routeId);
-                        patches.add(alertPatch);
+
+                        Set<Route> affectedRoutes = siriFuzzyTripMatcher.getRoutes(lineRef);
+                        for (Route route : affectedRoutes) {
+                            AgencyAndId routeId = route.getId();
+                            AlertPatch alertPatch = new AlertPatch();
+                            alertPatch.setRoute(routeId);
+                            patches.add(alertPatch);
+                        }
                     }
                 } else if (hasTripRefs && hasStopRefs) {
                     for (VehicleJourneyRef vjRef : vj.getVehicleJourneyReves()) {
@@ -273,12 +284,14 @@ public class AlertsUpdateHandler {
                     }
                 } else if (hasTripRefs) {
                     for (VehicleJourneyRef vjRef : vj.getVehicleJourneyReves()) {
-                        String tripId = vjRef.getValue();
 
-                        AlertPatch alertPatch = new AlertPatch();
-                        alertPatch.setRoute(new AgencyAndId(feedId, lineRef));
-                        alertPatch.setTrip(new AgencyAndId(feedId, tripId));
-                        patches.add(alertPatch);
+                        AgencyAndId tripId = siriFuzzyTripMatcher.getTripId(vjRef.getValue());
+                        if (tripId != null) {
+                            AlertPatch alertPatch = new AlertPatch();
+                            alertPatch.setRoute(new AgencyAndId(feedId, lineRef));
+                            alertPatch.setTrip(tripId);
+                            patches.add(alertPatch);
+                        }
                     }
                 } else {
                     for (AffectedCallStructure call : stopRefs.getCalls()) {

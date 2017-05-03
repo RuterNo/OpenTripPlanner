@@ -28,6 +28,7 @@ public class SiriFuzzyTripMatcher {
     private GraphIndex index;
 
     private static Map<String, Set<Trip>> mappedTripsCache = new HashMap<>();
+    private static Map<String, Set<Route>> mappedRoutesCache = new HashMap<>();
     private static Map<String, Set<Trip>> start_stop_tripCache = new HashMap<>();
 
     public SiriFuzzyTripMatcher(GraphIndex index) {
@@ -76,15 +77,27 @@ public class SiriFuzzyTripMatcher {
      * Matches EstimatedVehicleJourney to a set of possible Trips based on tripId
      */
     public Set<Trip> match(EstimatedVehicleJourney journey) {
+        Set<Trip> trips = null;
+        if (journey.getCourseOfJourneyRef() != null) {
+            //TripId is provided in VM-delivery
+            trips = getCachedTripsBySiriId(journey.getCourseOfJourneyRef().getValue());
+        }
+        if (trips == null) {
+            List<EstimatedCall> estimatedCalls = journey.getEstimatedCalls().getEstimatedCalls();
+            EstimatedCall lastStop = estimatedCalls.get(estimatedCalls.size() - 1);
 
-        List<EstimatedCall> estimatedCalls = journey.getEstimatedCalls().getEstimatedCalls();
-        EstimatedCall lastStop = estimatedCalls.get(estimatedCalls.size()-1);
+            String lastStopPoint = lastStop.getStopPointRef().getValue();
 
-        String lastStopPoint = lastStop.getStopPointRef().getValue();
+            ZonedDateTime arrivalTime = lastStop.getAimedArrivalTime() != null ? lastStop.getAimedArrivalTime() : lastStop.getAimedDepartureTime();
 
-        ZonedDateTime arrivalTime = lastStop.getAimedArrivalTime() != null ?lastStop.getAimedArrivalTime():lastStop.getAimedDepartureTime();
-
-        return start_stop_tripCache.get(createStartStopKey(lastStopPoint, arrivalTime.toLocalTime().toSecondOfDay()));
+            trips = start_stop_tripCache.get(createStartStopKey(lastStopPoint, arrivalTime.toLocalTime().toSecondOfDay()));
+            if (trips == null) {
+                //Attempt to fetch trips that started yesterday - i.e. add 24 hours to arrival-time
+                int lastStopArrivalTime = arrivalTime.toLocalTime().toSecondOfDay() + (24 * 60 * 60);
+                trips = start_stop_tripCache.get(createStartStopKey(lastStopPoint, lastStopArrivalTime));
+            }
+        }
+        return trips;
     }
 
     private Set<Trip> getCachedTripsBySiriId(String tripId) {
@@ -98,7 +111,7 @@ public class SiriFuzzyTripMatcher {
             Set<Trip> trips = index.patternForTrip.keySet();
             for (Trip trip : trips) {
 
-                String currentTripId = getUnpaddedTripId(trip);
+                String currentTripId = getUnpaddedTripId(trip.getId().getId());
 
                 if (mappedTripsCache.containsKey(currentTripId)) {
                     mappedTripsCache.get(currentTripId).add(trip);
@@ -125,7 +138,20 @@ public class SiriFuzzyTripMatcher {
                     }
                 }
             }
+            Set<Route> routes = index.patternsForRoute.keySet();
+            for (Route route : routes) {
 
+                String currentRouteId = getUnpaddedTripId(route.getId().getId());
+                if (mappedRoutesCache.containsKey(currentRouteId)) {
+                    mappedRoutesCache.get(currentRouteId).add(route);
+                } else {
+                    Set<Route> initialSet = new HashSet<>();
+                    initialSet.add(route);
+                    mappedRoutesCache.put(currentRouteId, initialSet);
+                }
+            }
+
+            LOG.info("Built route-cache [{}].", mappedRoutesCache.size());
             LOG.info("Built trips-cache [{}].", mappedTripsCache.size());
             LOG.info("Built start-stop-cache [{}].", start_stop_tripCache.size());
         }
@@ -150,8 +176,7 @@ public class SiriFuzzyTripMatcher {
         return lastStopId + ":" + lastStopArrivalTime;
     }
 
-    private static String getUnpaddedTripId(Trip trip) {
-        String id = trip.getId().getId();
+    private static String getUnpaddedTripId(String id) {
         if (id.indexOf("-") > 0) {
             return id.substring(0, id.indexOf("-"));
         } else {
@@ -174,14 +199,8 @@ public class SiriFuzzyTripMatcher {
         return null;
     }
 
-    public AgencyAndId getRoute(String lineRefValue) {
-        Collection<Route> routes = index.routeForId.values();
-        for (Route route : routes) {
-            if (route.getShortName().equals(lineRefValue)) {
-                return route.getId();
-            }
-        }
-        return null;
+    public Set<Route> getRoutes(String lineRefValue) {
+        return mappedRoutesCache.getOrDefault(lineRefValue, new HashSet<>());
     }
 
     public AgencyAndId getTripId(String vehicleJourney) {

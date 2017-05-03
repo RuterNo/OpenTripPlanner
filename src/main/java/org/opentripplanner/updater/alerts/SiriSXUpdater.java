@@ -112,7 +112,7 @@ public class SiriSXUpdater extends PollingGraphUpdater {
         long t1 = System.currentTimeMillis();
         try {
 
-            InputStream is = HttpUtils.postData(url, SiriXml.toXml(createSXServiceRequest(requestorRef)), timeout);
+            InputStream is = HttpUtils.postData(url, SiriHelper.createSXServiceRequestAsXml(requestorRef), timeout);
 
             Siri siri = (Siri)jaxbContext.createUnmarshaller().unmarshal(is);
 
@@ -146,32 +146,6 @@ public class SiriSXUpdater extends PollingGraphUpdater {
         }
     }
 
-
-    private Siri createSXServiceRequest(String requestorRefValue) {
-        Siri request = new Siri();
-        request.setVersion("2.0");
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setRequestTimestamp(ZonedDateTime.now());
-
-        RequestorRef requestorRef = new RequestorRef();
-        requestorRef.setValue(requestorRefValue);
-        serviceRequest.setRequestorRef(requestorRef);
-
-        SituationExchangeRequestStructure sxRequest = new SituationExchangeRequestStructure();
-        sxRequest.setRequestTimestamp(ZonedDateTime.now());
-        sxRequest.setVersion("2.0");
-
-        MessageQualifierStructure messageIdentifier = new MessageQualifierStructure();
-        messageIdentifier.setValue(UUID.randomUUID().toString());
-
-        sxRequest.setMessageIdentifier(messageIdentifier);
-        serviceRequest.getSituationExchangeRequests().add(sxRequest);
-
-        request.setServiceRequest(serviceRequest);
-
-        return request;
-    }
     @Override
     public void teardown() {
     }

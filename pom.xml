@@ -79,7 +79,7 @@
 
     <properties>
         <geotools.version>10.5</geotools.version>
-        <jackson.version>2.5.3</jackson.version>
+        <jackson.version>2.8.7</jackson.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <aws.version>1.9.39</aws.version>
     </properties>
@@ -564,6 +564,13 @@
             <groupId>org.rutebanken</groupId>
             <artifactId>siri-java-model</artifactId>
             <version>0.12-SNAPSHOT</version>
+        </dependency>
+
+        <!-- SIRI -->
+        <dependency>
+            <groupId>org.apache.activemq</groupId>
+            <artifactId>activemq-client</artifactId>
+            <version>5.13.4</version>
         </dependency>
 
         <!-- TESTING -->

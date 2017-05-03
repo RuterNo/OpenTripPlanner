@@ -16,8 +16,8 @@ package org.opentripplanner.updater.siri;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.opentripplanner.routing.graph.Graph;
 import org.opentripplanner.updater.JsonConfigurable;
+import org.opentripplanner.updater.SiriHelper;
 import org.opentripplanner.util.HttpUtils;
-import org.rutebanken.siri20.util.SiriXml;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uk.org.siri.siri20.*;
@@ -84,7 +84,7 @@ public class SiriVMHttpTripUpdateSource implements VehicleMonitoringSource, Json
         long t1 = System.currentTimeMillis();
         fullDataset = false;
         try {
-            InputStream is = HttpUtils.postData(url, SiriXml.toXml(createVMServiceRequest(requestorRef)), timeout);
+            InputStream is = HttpUtils.postData(url, SiriHelper.createVMServiceRequestAsXml(requestorRef), timeout);
             if (is != null) {
                 // Decode message
                 LOG.info("Fetching VM-data took {} ms", (System.currentTimeMillis()-t1));
@@ -98,7 +98,7 @@ public class SiriVMHttpTripUpdateSource implements VehicleMonitoringSource, Json
                 }
                 lastTimestamp = siri.getServiceDelivery().getResponseTimestamp();
 
-                return rewriteIds(siri.getServiceDelivery().getVehicleMonitoringDeliveries());
+                return siri.getServiceDelivery().getVehicleMonitoringDeliveries();
 
             }
         } catch (Exception e) {
@@ -106,78 +106,6 @@ public class SiriVMHttpTripUpdateSource implements VehicleMonitoringSource, Json
             LOG.warn("Failed to parse SIRI-VM feed from " + url + ":", e);
         }
         return null;
-    }
-
-    private List rewriteIds(List<VehicleMonitoringDeliveryStructure> deliveries) {
-        for (VehicleMonitoringDeliveryStructure delivery : deliveries) {
-            for (VehicleActivityStructure activityStructure : delivery.getVehicleActivities()) {
-                VehicleActivityStructure.MonitoredVehicleJourney mvj = activityStructure.getMonitoredVehicleJourney();
-                if (mvj != null) {
-                    DestinationRef destRef = mvj.getDestinationRef();
-                    if (destRef != null && destRef.getValue().contains(":")) {
-                        String value = destRef.getValue();
-                        if (value.substring(value.indexOf(":")).length() > 2) {
-                            // 1234:56 -> 123456
-                            value = value.replaceAll(":", "");
-                        } else {
-                            // 1234:5  -> 123405
-                            value = value.replaceAll(":", "0");
-                        }
-                        destRef.setValue(value);
-                    }
-                    JourneyPlaceRefStructure originRef = mvj.getOriginRef();
-                    if (originRef != null && originRef.getValue().contains(":")) {
-                        String value = originRef.getValue();
-                        if (value.substring(value.indexOf(":")).length() > 2) {
-                            value = value.replaceAll(":", "");
-                        } else {
-                            value = value.replaceAll(":", "0");
-                        }
-                        originRef.setValue(value);
-                    }
-                    MonitoredCallStructure monitoredCall = mvj.getMonitoredCall();
-                    if (monitoredCall != null && monitoredCall.getStopPointRef() != null && monitoredCall.getStopPointRef().getValue().contains(":")) {
-                        String value = monitoredCall.getStopPointRef().getValue();
-                        if (value.substring(value.indexOf(":")).length() > 2) {
-                            value = value.replaceAll(":", "");
-                        } else {
-                            value = value.replaceAll(":", "0");
-                        }
-                        monitoredCall.getStopPointRef().setValue(value);
-                    }
-//                            mvj.getPreviousCalls();
-//                            mvj.getOnwardCalls();
-                }
-            }
-        }
-        return deliveries;
-    }
-
-
-    private Siri createVMServiceRequest(String requestorRefValue) {
-        Siri request = new Siri();
-        request.setVersion("2.0");
-
-        ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setRequestTimestamp(ZonedDateTime.now());
-
-        RequestorRef requestorRef = new RequestorRef();
-        requestorRef.setValue(requestorRefValue);
-        serviceRequest.setRequestorRef(requestorRef);
-
-        VehicleMonitoringRequestStructure vmRequest = new VehicleMonitoringRequestStructure();
-        vmRequest.setRequestTimestamp(ZonedDateTime.now());
-        vmRequest.setVersion("2.0");
-
-        MessageQualifierStructure messageIdentifier = new MessageQualifierStructure();
-        messageIdentifier.setValue(UUID.randomUUID().toString());
-
-        vmRequest.setMessageIdentifier(messageIdentifier);
-        serviceRequest.getVehicleMonitoringRequests().add(vmRequest);
-
-        request.setServiceRequest(serviceRequest);
-
-        return request;
     }
 
     @Override

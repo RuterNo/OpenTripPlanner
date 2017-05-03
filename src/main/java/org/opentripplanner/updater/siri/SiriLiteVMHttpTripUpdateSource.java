@@ -16,23 +16,20 @@ package org.opentripplanner.updater.siri;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.opentripplanner.routing.graph.Graph;
 import org.opentripplanner.updater.JsonConfigurable;
-import org.opentripplanner.updater.SiriHelper;
 import org.opentripplanner.util.HttpUtils;
+import org.rutebanken.siri20.util.SiriJson;
+import org.rutebanken.siri20.util.SiriXml;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uk.org.siri.siri20.Siri;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import java.io.IOException;
 import java.io.InputStream;
 import java.time.ZonedDateTime;
 import java.util.List;
-import java.util.UUID;
 
-public class SiriETHttpTripUpdateSource implements EstimatedTimetableSource, JsonConfigurable {
+public class SiriLiteVMHttpTripUpdateSource implements VehicleMonitoringSource, JsonConfigurable {
     private static final Logger LOG =
-            LoggerFactory.getLogger(SiriETHttpTripUpdateSource.class);
+            LoggerFactory.getLogger(SiriLiteVMHttpTripUpdateSource.class);
 
     /**
      * True iff the last list with updates represent all updates that are active right now, i.e. all
@@ -49,9 +46,7 @@ public class SiriETHttpTripUpdateSource implements EstimatedTimetableSource, Jso
 
     private ZonedDateTime lastTimestamp = ZonedDateTime.now().minusMonths(1);
 
-    private String requestorRef;
-
-    private int timeout;
+    private String contentType;
 
     @Override
     public void configure(Graph graph, JsonNode config) throws Exception {
@@ -61,38 +56,36 @@ public class SiriETHttpTripUpdateSource implements EstimatedTimetableSource, Jso
         }
         this.url = url;
 
-        this.requestorRef = config.path("requestorRef").asText();
-        if (requestorRef == null || requestorRef.isEmpty()) {
-            requestorRef = UUID.randomUUID().toString();
-        }
         this.feedId = config.path("feedId").asText();
 
-        int timeoutSec = config.path("timeoutSec").asInt();
-        if (timeoutSec > 0) {
-            this.timeout = 1000*timeoutSec;
-        }
-
-        try {
-            jaxbContext = JAXBContext.newInstance(Siri.class);
-        } catch (JAXBException e) {
-            throw new InstantiationException("Unable to instantiate JAXBContext");
+        this.contentType = "json";
+        String type = config.path("contentType").asText();
+        if (type != null) {
+            if (type.equalsIgnoreCase("xml") | type.equalsIgnoreCase("json")) {
+                contentType = type.toLowerCase();
+            } else {
+                throw new IllegalArgumentException("Parameter 'contentType' must be set to either 'xml' or 'json'");
+            }
         }
     }
-
-    JAXBContext jaxbContext;
 
     @Override
     public List getUpdates() {
         long t1 = System.currentTimeMillis();
         try {
 
-            InputStream is = HttpUtils.postData(url, SiriHelper.createETServiceRequestAsXml(requestorRef), timeout);
+            InputStream is = HttpUtils.getData(url, "Accept", "application/" + contentType);
             if (is != null) {
                 // Decode message
-                LOG.info("Fetching ET-data took {} ms", (System.currentTimeMillis()-t1));
+                LOG.info("Fetching VM-data took {} ms", (System.currentTimeMillis()-t1));
                 t1 = System.currentTimeMillis();
 
-                Siri siri = (Siri) jaxbContext.createUnmarshaller().unmarshal(is);
+                Siri siri;
+                if (contentType.equalsIgnoreCase("xml")) {
+                    siri = SiriXml.parseXml(is);
+                } else {
+                    siri = SiriJson.parseJson(is);
+                }
                 LOG.info("Unmarshalling ET-data took {} ms", (System.currentTimeMillis()-t1));
 
                 if (siri.getServiceDelivery().getResponseTimestamp().isBefore(lastTimestamp)) {
@@ -101,17 +94,12 @@ public class SiriETHttpTripUpdateSource implements EstimatedTimetableSource, Jso
                 }
                 lastTimestamp = siri.getServiceDelivery().getResponseTimestamp();
 
-                //All subsequent requests will return changes since last request
-                fullDataset = false;
-                return siri.getServiceDelivery().getEstimatedTimetableDeliveries();
+                return siri.getServiceDelivery().getVehicleMonitoringDeliveries();
 
             }
-        } catch (IOException e) {
-            LOG.info("Failed after {} ms", (System.currentTimeMillis()-t1));
-            LOG.warn("Could not get SIRI-ET data from {}, caused by {}", url, e.getMessage());
         } catch (Exception e) {
             LOG.info("Failed after {} ms", (System.currentTimeMillis()-t1));
-            LOG.warn("Failed to parse SIRI-ET feed from " + url + ":", e);
+            LOG.warn("Failed to parse SIRI Lite VM feed from " + url + ":", e);
         }
         return null;
     }
@@ -122,7 +110,7 @@ public class SiriETHttpTripUpdateSource implements EstimatedTimetableSource, Jso
     }
     
     public String toString() {
-        return "SiriETHttpTripUpdateSource(" + url + ")";
+        return "SiriLiteVMHttpTripUpdateSource(" + url + ")";
     }
 
     @Override
