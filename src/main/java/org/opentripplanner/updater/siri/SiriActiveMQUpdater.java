@@ -16,6 +16,7 @@ import uk.org.siri.siri20.VehicleMonitoringDeliveryStructure;
 
 import javax.jms.*;
 import javax.xml.bind.JAXBException;
+import javax.xml.stream.XMLStreamException;
 import java.util.List;
 
 
@@ -85,7 +86,7 @@ public class SiriActiveMQUpdater implements GraphUpdater {
                     Siri siri = null;
                     try {
                         siri = SiriXml.parseXml(textMessage.getText());
-                    } catch (JAXBException e) {
+                    } catch (JAXBException | XMLStreamException e) {
                         e.printStackTrace();
                     }
                     if (siri != null && siri.getServiceDelivery() != null) {
