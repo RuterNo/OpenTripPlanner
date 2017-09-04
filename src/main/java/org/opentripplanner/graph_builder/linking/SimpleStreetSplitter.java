@@ -355,8 +355,9 @@ public class SimpleStreetSplitter {
             makeLinkEdges(tstop, v0);
 
             // If splitter vertex is part of area, link splittervertex to all other vertexes in area, this creates
-            // edges that were missed by WalkableAreaBuilder
-            if (edge instanceof AreaEdge && !this.skipVisibilty) {
+            // edges that were missed by WalkableAreaBuilder.
+            // Check for TransitStop to make sure this is not done when linking temporary vertices during routing
+            if (edge instanceof AreaEdge && tstop instanceof TransitStop && !this.skipVisibilty) {
                 linkTransitToAreaVertices(v0, ((AreaEdge) edge).getArea());
             }
         }
