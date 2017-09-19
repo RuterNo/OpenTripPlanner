@@ -78,7 +78,7 @@ public class SimpleStreetSplitter {
 
     public static final int MAX_SEARCH_RADIUS_METERS = 1000;
 
-    public Boolean skipVisibilty = false;
+    private Boolean addExtraEdgesToAreas = false;
 
     private StreetEdgeFactory edgeFactory;
 
@@ -354,10 +354,9 @@ public class SimpleStreetSplitter {
             SplitterVertex v0 = split(edge, ll, temporaryVertex != null, endVertex);
             makeLinkEdges(tstop, v0);
 
-            // If splitter vertex is part of area, link splittervertex to all other vertexes in area, this creates
-            // edges that were missed by WalkableAreaBuilder.
-            // Check for TransitStop to make sure this is not done when linking temporary vertices during routing
-            if (edge instanceof AreaEdge && tstop instanceof TransitStop && !this.skipVisibilty) {
+            // If splitter vertex is part of area; link splittervertex to all other vertexes in area, this creates
+            // edges that were missed by WalkableAreaBuilder
+            if (edge instanceof AreaEdge && tstop instanceof TransitStop && this.addExtraEdgesToAreas) {
                 linkTransitToAreaVertices(v0, ((AreaEdge) edge).getArea());
             }
         }
@@ -577,5 +576,13 @@ public class SimpleStreetSplitter {
         }
         return closest;
 
+    }
+
+    public Boolean getAddExtraEdgesToAreas() {
+        return addExtraEdgesToAreas;
+    }
+
+    public void setAddExtraEdgesToAreas(Boolean addExtraEdgesToAreas) {
+        this.addExtraEdgesToAreas = addExtraEdgesToAreas;
     }
 }
